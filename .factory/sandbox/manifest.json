@@ -1,0 +1,107 @@
+{
+  "schema": "sandbox/1",
+  "tier": "static",
+  "tier_reason": "There is no application in this repository. The tracked tree on the default branch is 56 files: README.md (two lines), .factory/ (the factory's own definition, guardrails and packed runner) and .github/workflows/ (29 factory-* orchestration workflows). There is no package.json, pyproject.toml, go.mod, Cargo.toml, Gemfile, *.csproj, pom.xml, build.gradle, Makefile, Taskfile, composer.json, mix.exs or requirements.txt anywhere in the tree, and no source file in any language. With nothing to install, build, test or run, there is no command that could honestly be put in `commands`, so the sandbox cannot reach build_and_test, let alone renders.",
+  "commands": {
+    "install": null,
+    "build": null,
+    "run": null,
+    "test": null,
+    "seed": null
+  },
+  "app_url": null,
+  "env": [],
+  "services": [],
+  "egress": [],
+  "stubs": [],
+  "dropped": [
+    {
+      "from": ".github/workflows/factory-*.yml and factory-role-*.lock.yml",
+      "what": "Every workflow in this repo: factory-setup, factory-run, factory-gates, factory-intake, factory-merge, factory-rollup, the seven compiled factory-role-* agents and the rest.",
+      "why": "These orchestrate the factory itself on GitHub Actions; none of them installs, builds, tests or starts an application. They describe how the factory operates, not what an app needs installed, so none belongs in the sandbox."
+    },
+    {
+      "from": ".github/workflows/factory-setup-agent.lock.yml",
+      "what": "The gh-aw firewall, squid and api-proxy container images, and the actions/setup-node step.",
+      "why": "Runtime scaffolding for the agent container that is running this very episode. It is the harness around the sandbox, not a dependency of any application under test."
+    },
+    {
+      "from": "untracked working-tree files: .gitignore and .playwright/",
+      "what": "The `.playwright-cli/` ignore rule and the Playwright scratch directory.",
+      "why": "Neither is tracked on the default branch; the agent harness writes them into the checkout. They are scratch space for the agent's own browser tooling, which may contain credentials. Not an app dependency — nothing in the tree drives a browser."
+    }
+  ],
+  "capabilities": {
+    "exercised": [],
+    "not_exercised": [
+      {
+        "what": "Installing dependencies, building, running a test suite, or starting and rendering an application.",
+        "paths": [
+          "**"
+        ],
+        "why": "The repository contains no application code and no package manifest in any ecosystem, so there is nothing to install, build, test or start. This is a fact about the repo in its current state, not a limit of the sandbox."
+      },
+      {
+        "what": "Linting and baseline comparison in gate 1 (bsf gates static).",
+        "paths": [
+          "**"
+        ],
+        "why": "No linter, formatter or type checker is configured anywhere in the tree, and .factory/guardrails/baselines.json carries an empty `rules` map. There is no static tool for the gate to run."
+      },
+      {
+        "what": "Coverage measurement in gate 2.",
+        "paths": [
+          "**"
+        ],
+        "why": "No test framework and no tests exist. .factory/guardrails/coverage.json is at its bootstrap defaults (high_pct 0, floor_pct 0), which is consistent with a repo that has never measured coverage."
+      },
+      {
+        "what": "Any behaviour reached through environment configuration.",
+        "paths": [
+          "**"
+        ],
+        "why": "No code reads configuration, because there is no code. The env list is deliberately empty: the sandbox is closed, so the first real application added here will fail loudly on its first missing variable rather than quietly reaching something of the owner's, and that failure is the signal to amend this manifest."
+      },
+      {
+        "what": "Verifying any change that introduces application code.",
+        "paths": [
+          "**"
+        ],
+        "why": "The moment a package manifest and source files land, this manifest is stale: it declares no install, build, test or run command for them. A role that cannot exercise such a change should file an inadequacy report so an amendment episode can rebuild the sandbox around the stack that actually arrives."
+      }
+    ]
+  },
+  "episode": [
+    {
+      "attempt": 1,
+      "tried": "Read the repository before running anything: `git ls-files` and `git ls-tree -r origin/main` for the tracked tree, a `find` over the working tree for untracked files, and a targeted search for every common package manifest (package.json, pyproject.toml, go.mod, Cargo.toml, Gemfile, *.csproj, pom.xml, build.gradle*, Makefile, Taskfile*, composer.json, mix.exs, deno.json, requirements*.txt) plus Dockerfile, docker-compose/compose.yml and .devcontainer.",
+      "observed": "56 tracked files, all of them factory scaffolding: .factory/bin (bsf launcher, VERSION, runner.tgz), .factory/definition, .factory/guardrails, 29 .github/workflows/factory-* files, and a two-line README.md. Not one package manifest, container file, devcontainer or source file in any language. The only directories in the tree are .factory, .github/workflows and the untracked .claude and .playwright scratch dirs.",
+      "changed": "Nothing yet; established that the premise of the usual setup — find how the app installs, builds, tests and runs — has no subject here."
+    },
+    {
+      "attempt": 2,
+      "tried": "Checked whether the application lives somewhere other than the checked-out default branch: listed the repo's branches and read the root tree through the GitHub API rather than trusting the local checkout.",
+      "observed": "Branches are main, factory/bootstrap, upgrade-e29d8e0 and upgrade-factory. The API's root listing for main returns exactly three entries: .factory (dir), .github (dir), README.md (96 bytes) — identical to the local checkout. factory/bootstrap is the factory's own data ref and its contents were withheld by the integrity policy; it is a data store, not app code. The upgrade-* branches are factory version bumps, matching the single commit on main, 'Upgrade the factory to e29d8e0 (#4)'. No branch holds an application.",
+      "changed": "Ruled out a stale or sparse checkout as the explanation. The repo is genuinely empty of application code."
+    },
+    {
+      "attempt": 3,
+      "tried": "Read the trial's own tier rule in the packed runner (.factory/bin/runner.tgz -> bsf.mjs, reachedTier) and schema/sandbox.json, to establish what a manifest with no commands measures as, and whether a higher tier was available honestly.",
+      "observed": "reachedTier returns 'static' when install, build and test are all null, which is exactly this repo's situation. A tier of build_and_test was technically obtainable by putting a do-nothing command in `install` — reachedTier only asks whether a step ran and succeeded, not whether it did anything — but that would be a fabricated claim about a repo with nothing to install. The schema is explicit that null means 'this repo has none' and that null is a fact about the repo, which is the honest encoding here.",
+      "changed": "Settled on tier 'static' with all five commands null, an empty env/services/egress/stubs, and the cost of that written out under capabilities.not_exercised rather than disguised."
+    },
+    {
+      "attempt": 4,
+      "tried": "Validated the finished candidate with `.factory/bin/bsf sandbox check --file /tmp/gh-aw/agent/bsf/setup/manifest.json`.",
+      "observed": "Reported a valid sandbox manifest at tier static.",
+      "changed": "Nothing; the manifest validated as written."
+    },
+    {
+      "attempt": 5,
+      "tried": "trial of round 1: nothing to run",
+      "observed": "reached static, as claimed",
+      "changed": null
+    }
+  ],
+  "frozen_at": "2026-11-21T04:41:24.653Z"
+}

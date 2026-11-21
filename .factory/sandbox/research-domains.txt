@@ -1,0 +1,37 @@
+# Documentation hosts for what this repo actually uses.
+#
+# This repo has no application stack. There is no package manifest in any
+# ecosystem and no source file, so there is no framework or library whose
+# docs the spec role would need. The three hosts below cover the only
+# technologies present: GitHub Actions workflows, gh-aw compiled agentic
+# workflows, and the JSON Schema dialect the factory's own config files are
+# written against.
+#
+# Keep this list short and true. When application code lands, the amendment
+# episode should add that stack's doc hosts here; do not pre-add hosts for a
+# stack the repo might one day have.
+
+# GitHub Actions workflow syntax, reusable workflows, artifacts, permissions.
+# Used by all 29 .github/workflows/factory-*.yml files. (`github` is already
+# on the spec role's allowlist, but that bundle is not guaranteed to cover
+# the docs site, so it is named explicitly.)
+docs.github.com
+
+# gh-aw (agentic workflows): frontmatter, network.allowed, safe outputs, and
+# the .md -> .lock.yml compile step behind every factory-role-* pair. The
+# vendored helper inside the factory runner records its origin as
+# githubnext/gh-aw; the project also lives at github.com/github/gh-aw, which
+# the existing `github` allowlist entry already covers.
+githubnext.github.io
+
+# JSON Schema draft 2020-12, the dialect of the factory's own schemas
+# (sandbox, factory, policy, rubric) and of .factory/guardrails/*.json.
+json-schema.org
+
+# Deliberately not listed:
+#   playwright.dev     - Playwright is the trial harness's screenshot tool and
+#                        an agent skill, not a dependency of this repo. No
+#                        code here drives a browser.
+#   npm/pypi/crates... - already covered by the spec role's node, python, go,
+#                        rust, ruby, java and dotnet allowlist entries, and
+#                        this repo depends on none of them.

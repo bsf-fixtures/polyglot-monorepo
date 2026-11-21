@@ -5,34 +5,61 @@
   Every agent reads this first. The question it has to answer is "where would
   this change go?" — so it names folders and what each one owns, not what the
   product does.
-
-  {{PLACEHOLDERS}} are filled in by setup.
 -->
 
-# Feature map — {{REPO_NAME}}
+# Feature map — polyglot-monorepo
 
-{{ONE_LINE_WHAT_THIS_REPO_IS}}
+A fixture repository for the Build Software Factory. It currently holds the
+factory's own definition and workflows and nothing else: there is no
+application, in any language, despite the name.
+
+Read that literally before planning any change. The tracked tree on `main` is
+56 files — `README.md`, `.factory/`, `.github/workflows/`. There is no source
+file, no package manifest, and no import graph to map.
 
 ## Feature folders
 
 | Folder | Owns | Depends on |
 | --- | --- | --- |
-{{FEATURE_FOLDER_ROWS}}
+| _(none)_ | No feature folder exists. Nothing in this repo implements a product. | — |
 
 ## Shared
 
 | Folder | What it is | Rule |
 | --- | --- | --- |
-{{SHARED_FOLDER_ROWS}}
+| `.factory/definition/` | The factory's configuration: `factory.yaml`, `policy.yaml`, the seven `roles/*.yaml`, the five `rubrics/*.yaml`, and the `context/*.md` templates these files were generated from. | Changes need a trusted human's approval — `factory.yaml` says so in its own header. Not ordinary application code; do not edit it to make a build pass. |
+| `.factory/guardrails/` | The static-analysis state: `baselines.json` (per-rule, per-file counts), `candidates.json` (proposed rules), `coverage.json` (floors and diff minimum). | Written by the gates, not by hand. All three are at bootstrap defaults — `rules: {}`, `candidates: []`, `high_pct: 0`, `floor_pct: 0` — because no linter or test suite exists here yet. |
+| `.factory/bin/` | The packed factory runner: the `bsf` shell launcher, `VERSION`, and `runner.tgz` containing `bsf.mjs` and the JSON schemas. | Treat as a vendored binary. It is a tarball on purpose (see the deliberate exception in `fundamentals.md`). Upgrades arrive as whole-file replacements, as in commit `72d8322`. |
+| `.github/workflows/` | 29 factory workflows: the `factory-*.yml` orchestration and the seven `factory-role-*.md` agent sources with their compiled `.lock.yml` counterparts. | Never hand-edit a `.lock.yml`; edit the `.md` and recompile. `bsf audit` compares the lock's recorded frontmatter and body hashes against the source and will catch a divergence. |
 
 ## Where things go
 
-- **A new feature** gets its own folder under {{FEATURE_ROOT}}.
-- **Something used by two features** moves to {{SHARED_ROOT}}, and not before
+The three rules below are the factory's standard layout contract. **No part of
+it is established in this repo yet** — there is no `src/`, no `apps/`, no
+`packages/`, and no precedent to follow — so the first change that adds
+application code is also the change that picks these roots. Pick them once,
+say so in the pull request, and update this file in the same change.
+
+- **A new feature** gets its own folder under the feature root — to be chosen
+  when the first feature lands.
+- **Something used by two features** moves to the shared root, and not before
   the second use. One caller is not a shared concern.
 - **Nothing in a feature folder imports from another feature folder.** Where
   two features need the same thing, it belongs in shared.
 
 ## Not in this repo
 
-{{OUT_OF_SCOPE}}
+- **Any application.** No web server, service, CLI, library or UI. The sandbox
+  manifest records tier `static` for exactly this reason.
+- **Any build, test or run command.** No `package.json`, `pyproject.toml`,
+  `go.mod`, `Cargo.toml`, `Gemfile`, `*.csproj`, `pom.xml`, `build.gradle`,
+  `Makefile`, `Taskfile`, `composer.json`, `mix.exs` or `requirements.txt`
+  exists anywhere in the tree.
+- **Any container or environment definition.** No `Dockerfile`, no
+  `docker-compose.yml`/`compose.yml`, no `.devcontainer/`.
+- **Any linter, formatter, type checker or test framework.** Nothing is
+  configured, which is why `baselines.json` is empty.
+- **Application CI.** Every workflow present drives the factory itself; none
+  builds or tests a product.
+- **The factory's run data.** It lives on the `factory/bootstrap` branch, not
+  in the working tree.
