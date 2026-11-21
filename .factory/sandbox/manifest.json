@@ -1,0 +1,101 @@
+{
+  "schema": "sandbox/1",
+  "tier": "build_and_test",
+  "tier_reason": "Neither half of this repo is a runnable application. apps/web is a TypeScript library (tsconfig sets noEmit, package.json has no start/dev/serve script and no server, framework or HTML entry point) and services/pricing is a Python package (no __main__, no ASGI/WSGI app, no HTTP framework in its dependencies — its dependency list is empty). There is nothing to start and no URL to screenshot, so renders is unreachable; both suites build and run, so build_and_test is the ceiling.",
+  "commands": {
+    "install": "(cd apps/web && npm ci) && python3 -m venv \"${TMPDIR:-/tmp}/bsf-venv/pricing\" && \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/python\" -m pip install -e \"./services/pricing[dev]\"",
+    "build": "(cd apps/web && ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/eslint .) && (cd services/pricing && \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/ruff\" check .)",
+    "run": null,
+    "test": "(cd apps/web && ./node_modules/.bin/vitest run) && (cd services/pricing && \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/pytest\" -q)",
+    "seed": null
+  },
+  "app_url": null,
+  "env": [],
+  "services": [],
+  "egress": [],
+  "stubs": [],
+  "dropped": [
+    {
+      "from": ".github/workflows/ci.yml",
+      "what": "actions/setup-python@v5 with python-version 3.12 and actions/setup-node@v4 with node-version 22",
+      "why": "Those pin the toolchain for CI's runner. The sandbox uses whatever python3 and node the runner already has; pyproject requires-python is >=3.11 and the web app pins no engines, so both are satisfied without a setup action. Recording it because it is the one place the repo states a version, and a future failure on an older interpreter should be traced back to here."
+    },
+    {
+      "from": ".github/workflows/ci.yml",
+      "what": "Two separate jobs (web, pricing) with path filters, so a PR touching only apps/web does not run the Python suite",
+      "why": "The split is a CI scheduling optimisation, not something the app needs installed. The sandbox is one environment for both apps, and the factory's gates decide which tools to run for a given change. Running both suites in the sandbox is the safe direction: the cost is seconds, and the contract in CONTRACT.md is exactly the thing a single-app run would miss."
+    },
+    {
+      "from": ".github/workflows/ci.yml",
+      "what": "pip install -e '.[dev]' run against the runner's interpreter directly",
+      "why": "CI gets away with it because actions/setup-python provides an interpreter that is not marked externally-managed. The trial job runs no setup-python, so the system python3 on a current Ubuntu runner would reject a bare pip install under PEP 668. The sandbox creates a virtualenv instead and installs into that; it is the same install, just somewhere pip is allowed to write."
+    }
+  ],
+  "capabilities": {
+    "exercised": [
+      "apps/web: TypeScript type checking of src/ and test/ under strict and noUncheckedIndexedAccess (tsc --noEmit)",
+      "apps/web: eslint 9 flat config over the whole package (js recommended + typescript-eslint recommended)",
+      "apps/web: the vitest suite, 9 tests, including the five rounding rows from CONTRACT.md and the TypeError/RangeError guards",
+      "services/pricing: ruff check over the whole package with the E, F, B, SIM, RET, ARG rule selection from pyproject",
+      "services/pricing: the pytest suite, 10 tests, including the same five rounding rows and the half-up-not-half-to-even case",
+      "The cross-language contract itself: both implementations are checked against the one table in CONTRACT.md in a single test command, so changing one language's rounding without the other fails here. Verified by truncating instead of rounding half up in services/pricing/pricing/basket.py — 4 Python tests failed, 0 TypeScript tests failed — then reverting.",
+      "Editable installation of the pricing package, so a change to pricing/ is picked up by the tests without reinstalling"
+    ],
+    "not_exercised": [
+      {
+        "what": "Anything rendering in a browser, and any end-to-end check of a running process",
+        "why": "There is no application to start. apps/web compiles with noEmit and exports three functions; it has no HTML, no DOM code, no bundler and no dev server. services/pricing exposes a module API and has no HTTP framework or entry point. There is no URL for the trial to open and nothing for a screenshot to show."
+      },
+      {
+        "what": "The web app actually calling the pricing service over a wire",
+        "why": "README.md describes the relationship as 'the web app asks the service what a basket costs', but no code implements it — there is no HTTP client in apps/web and no server in services/pricing. The sandbox verifies that the two implementations agree on the same table of values, which is what the repo really enforces; it cannot verify a request/response path that does not exist yet. A change that introduces one needs an amendment to add the service and its URL."
+      },
+      {
+        "what": "Coverage measurement, for either app",
+        "why": "No coverage provider is installed in either package: apps/web has no @vitest/coverage-v8 or istanbul provider in devDependencies, and services/pricing has no pytest-cov in its dev extra. vitest --coverage and pytest --cov therefore cannot run. .factory/guardrails/coverage.json asks for 80% diff coverage, so this gap is the one most likely to need an amendment; adding either provider is a one-line dependency change plus a command.",
+        "paths": [
+          "apps/web/package.json",
+          "services/pricing/pyproject.toml",
+          ".factory/guardrails/coverage.json"
+        ]
+      },
+      {
+        "what": "Any persistent state — database, cache, queue, object store, outbound email or any third-party API",
+        "why": "The repo has none. Both halves are pure functions over integer cents, there is no network or filesystem access in either, no environment variable is read anywhere in apps/ or services/, and there is no Dockerfile, compose file or devcontainer. That is why env, services, stubs and egress are all empty rather than unfilled: the sandbox gives the app nothing because the app asks for nothing."
+      }
+    ]
+  },
+  "episode": [
+    {
+      "attempt": 1,
+      "tried": "Read before running: README.md, CONTRACT.md, both manifest files, both sources, both test files, eslint.config.mjs, tsconfig.json, .github/workflows/ci.yml and .factory/definition/factory.yaml. Grepped apps/ and services/ for process.env, os.environ, getenv, dotenv and config reads, and searched the tree for a Dockerfile, a compose file or a devcontainer.",
+      "observed": "No match for any configuration read, and no container or devcontainer file exists. Two self-contained libraries with no dependencies beyond their own dev tools: apps/web depends on eslint, typescript, typescript-eslint and vitest; services/pricing declares an empty runtime dependency list and pytest plus ruff for dev. Nothing to configure, nothing to connect to, nothing to start.",
+      "changed": "Settled the shape of the manifest before running anything: env, services, stubs and egress empty; run and app_url null; the tier can be no higher than build_and_test."
+    },
+    {
+      "attempt": 2,
+      "tried": "npm ci in apps/web, then python3 -m venv plus pip install -e '.[dev]' for services/pricing, then each of tsc --noEmit, eslint ., vitest run, ruff check . and pytest -q by hand.",
+      "observed": "All of them pass: 9 vitest tests, 10 pytest tests, no type errors, no lint findings. Chose a virtualenv over CI's bare pip install because the trial job runs no actions/setup-python, so its python3 is the runner's system interpreter and PEP 668 would reject installing into it.",
+      "changed": "Put the virtualenv under ${TMPDIR:-/tmp}/bsf-venv/pricing rather than inside the checkout. .gitignore covers node_modules, __pycache__, *.egg-info, .pytest_cache and .ruff_cache but has no entry for a virtualenv, so a venv in the tree would be untracked and a role running `git add -A` could commit several thousand files. TMPDIR is one of the six variables the closed environment carries through, and install always runs before build and test, so the path is stable where it is used."
+    },
+    {
+      "attempt": 3,
+      "tried": "Ran the three candidate command strings verbatim through bash -c from the repository root with env -i, carrying only the PATH, HOME, TMPDIR, LANG and CI that the sandbox's closed environment passes, to check that nothing depends on an inherited variable.",
+      "observed": "build and test both passed under env -i. install failed there with 'Could not find a version that satisfies the requirement setuptools>=68' — this agent sandbox reaches package registries through a proxy whose configuration env -i had stripped, not a defect in the command; it succeeds with the normal environment, and the trial runner has direct registry access, which ci.yml already demonstrates for the same install. Used subshells for every cd so each command starts from the workspace root regardless of what ran before it.",
+      "changed": "Switched from `npx tsc` and `npm test` to ./node_modules/.bin/tsc, ./node_modules/.bin/eslint and ./node_modules/.bin/vitest. npx will silently fetch a package from the registry when it is not installed locally, which would turn a missing install into a slow pass instead of an immediate failure."
+    },
+    {
+      "attempt": 4,
+      "tried": "Ran the build and test commands in a freshly created empty directory, the same control the trial applies, and separately checked the claim README.md makes about the contract by replacing the Decimal ROUND_HALF_UP quantize in services/pricing/pricing/basket.py with int() truncation.",
+      "observed": "Both commands exit 1 in an empty directory — the first `cd apps/web` fails, so neither can pass without this repo's code. Truncating the Python rounding failed 4 pytest tests, including the 333-less-33% row and the 445-less-50% half-to-even case, and 0 vitest tests; restored the file and confirmed a clean diff. So the test command does genuinely distinguish the two implementations.",
+      "changed": "Added eslint and ruff to the build command. CI runs both, the build then covers services/pricing instead of only apps/web, and the control still fails in an empty directory."
+    },
+    {
+      "attempt": 5,
+      "tried": "trial of round 1: install, build, test, control",
+      "observed": "reached build_and_test, as claimed",
+      "changed": null
+    }
+  ],
+  "frozen_at": "2026-11-21T05:38:33.942Z"
+}
