@@ -3,12 +3,31 @@
   "tier": "build_and_test",
   "tier_reason": "Neither half of this repo is a runnable application. apps/web is a TypeScript library (tsconfig sets noEmit, package.json has no start/dev/serve script and no server, framework or HTML entry point) and services/pricing is a Python package (no __main__, no ASGI/WSGI app, no HTTP framework in its dependencies — its dependency list is empty). There is nothing to start and no URL to screenshot, so renders is unreachable; both suites build and run, so build_and_test is the ceiling.",
   "commands": {
-    "install": "(cd apps/web && npm ci) && python3 -m venv \"${TMPDIR:-/tmp}/bsf-venv/pricing\" && \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/python\" -m pip install -e \"./services/pricing[dev]\"",
+    "install": "(cd apps/web && npm ci && npm install --no-save --no-package-lock \"@vitest/coverage-v8@$(node -e 'process.stdout.write(require(\"./node_modules/vitest/package.json\").version)')\" @microsoft/eslint-formatter-sarif) && python3 -m venv \"${TMPDIR:-/tmp}/bsf-venv/pricing\" && \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/python\" -m pip install -e \"./services/pricing[dev]\" pytest-cov",
     "build": "(cd apps/web && ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/eslint .) && (cd services/pricing && \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/ruff\" check .)",
     "run": null,
     "test": "(cd apps/web && ./node_modules/.bin/vitest run) && (cd services/pricing && \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/pytest\" -q)",
-    "seed": null
+    "seed": null,
+    "coverage": "rm -rf /tmp/bsf-coverage && mkdir -p /tmp/bsf-coverage && (cd apps/web && ./node_modules/.bin/vitest run --coverage.enabled --coverage.provider=v8 --coverage.all --coverage.include=\"src/**\" --coverage.reporter=lcovonly --coverage.reportsDirectory=/tmp/bsf-coverage/web) && (cd services/pricing && COVERAGE_FILE=/tmp/bsf-coverage/.coverage \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/pytest\" -q --cov=pricing --cov-report=lcov:/tmp/bsf-coverage/pricing.lcov) && sed \"s|^SF:|SF:apps/web/|\" /tmp/bsf-coverage/web/lcov.info > /tmp/bsf-coverage/lcov.info && sed \"s|^SF:|SF:services/pricing/|\" /tmp/bsf-coverage/pricing.lcov >> /tmp/bsf-coverage/lcov.info"
   },
+  "coverage_report": {
+    "path": "/tmp/bsf-coverage/lcov.info",
+    "format": "lcov"
+  },
+  "static_checks": [
+    {
+      "name": "eslint",
+      "command": "mkdir -p /tmp/bsf-sarif && cd apps/web && ./node_modules/.bin/eslint . --format @microsoft/eslint-formatter-sarif --output-file /tmp/bsf-sarif/eslint.sarif",
+      "sarif": "/tmp/bsf-sarif/eslint.sarif",
+      "why": "The static gate runs its own eslint only when node_modules/eslint/bin/eslint.js sits at the repository root. In this monorepo eslint is installed in apps/web/node_modules, so the built-in never fires and the TypeScript half of the repo was checked by nothing. This runs the repo's own eslint 9 with its own eslint.config.mjs, from apps/web so the flat config applies, and emits SARIF through @microsoft/eslint-formatter-sarif (installed by commands.install, not added to package.json). Its artifactLocation URIs are absolute file:// URIs, so the gate relativises them to apps/web/src/... and counts per rule per file."
+    },
+    {
+      "name": "ruff",
+      "command": "mkdir -p /tmp/bsf-sarif && \"${TMPDIR:-/tmp}/bsf-venv/pricing/bin/ruff\" check --no-cache --output-format sarif --output-file /tmp/bsf-sarif/ruff.sarif services/pricing",
+      "sarif": "/tmp/bsf-sarif/ruff.sarif",
+      "why": "The static gate runs its own ruff only when pyproject.toml or ruff.toml sits at the repository root. Here pyproject.toml is in services/pricing, so the built-in never fires and the Python half was checked by nothing either. ruff emits SARIF natively (0.17.6 is installed). It is run from the repository root over the services/pricing path so that its absolute file:// URIs relativise to services/pricing/pricing/..., and ruff's own hierarchical config discovery still picks up the E, F, B, SIM, RET, ARG selection from services/pricing/pyproject.toml — confirmed by an ARG001 finding on a scratch file."
+    }
+  ],
   "app_url": null,
   "env": [],
   "services": [],
@@ -29,15 +48,21 @@
       "from": ".github/workflows/ci.yml",
       "what": "pip install -e '.[dev]' run against the runner's interpreter directly",
       "why": "CI gets away with it because actions/setup-python provides an interpreter that is not marked externally-managed. The trial job runs no setup-python, so the system python3 on a current Ubuntu runner would reject a bare pip install under PEP 668. The sandbox creates a virtualenv instead and installs into that; it is the same install, just somewhere pip is allowed to write."
+    },
+    {
+      "from": "apps/web/tsconfig.json",
+      "what": "tsc as a static_checks entry, alongside eslint and ruff",
+      "why": "The type check is already the build (tsc --noEmit is the whole of apps/web's build step), so a type error fails the build and the change never reaches the ratchet. tsc has no SARIF output and the factory has no built-in TypeScript checker, so making it a static_check would mean writing a diagnostic-to-SARIF converter with nowhere in this repo to keep it. Left as a build failure rather than a counted, baselined finding — which means a pre-existing type error could not be baselined and tolerated, but there are none."
     }
   ],
   "capabilities": {
     "exercised": [
       "apps/web: TypeScript type checking of src/ and test/ under strict and noUncheckedIndexedAccess (tsc --noEmit)",
-      "apps/web: eslint 9 flat config over the whole package (js recommended + typescript-eslint recommended)",
+      "apps/web: eslint 9 flat config over the whole package (js recommended + typescript-eslint recommended), twice — once in the build, where a finding fails it, and once as the `eslint` static check, which writes SARIF so the gate can count findings per rule per file and ratchet them",
       "apps/web: the vitest suite, 9 tests, including the five rounding rows from CONTRACT.md and the TypeError/RangeError guards",
-      "services/pricing: ruff check over the whole package with the E, F, B, SIM, RET, ARG rule selection from pyproject",
+      "services/pricing: ruff check with the E, F, B, SIM, RET, ARG rule selection from pyproject, twice — once in the build and once as the `ruff` static check, which writes SARIF for the same reason",
       "services/pricing: the pytest suite, 10 tests, including the same five rounding rows and the half-up-not-half-to-even case",
+      "Line coverage for both languages in one lcov report: @vitest/coverage-v8 over apps/web/src and pytest-cov over services/pricing/pricing, each run through the same test invocation as commands.test, path-prefixed to the repository root and concatenated. Measured here: 3 files, 100% of lines (apps/web/src/basket.ts 5/5, services/pricing/pricing/__init__.py 2/2, services/pricing/pricing/basket.py 19/19), so diff coverage is measurable for a change to either language.",
       "The cross-language contract itself: both implementations are checked against the one table in CONTRACT.md in a single test command, so changing one language's rounding without the other fails here. Verified by truncating instead of rounding half up in services/pricing/pricing/basket.py — 4 Python tests failed, 0 TypeScript tests failed — then reverting.",
       "Editable installation of the pricing package, so a change to pricing/ is picked up by the tests without reinstalling"
     ],
@@ -51,12 +76,27 @@
         "why": "README.md describes the relationship as 'the web app asks the service what a basket costs', but no code implements it — there is no HTTP client in apps/web and no server in services/pricing. The sandbox verifies that the two implementations agree on the same table of values, which is what the repo really enforces; it cannot verify a request/response path that does not exist yet. A change that introduces one needs an amendment to add the service and its URL."
       },
       {
-        "what": "Coverage measurement, for either app",
-        "why": "No coverage provider is installed in either package: apps/web has no @vitest/coverage-v8 or istanbul provider in devDependencies, and services/pricing has no pytest-cov in its dev extra. vitest --coverage and pytest --cov therefore cannot run. .factory/guardrails/coverage.json asks for 80% diff coverage, so this gap is the one most likely to need an amendment; adding either provider is a one-line dependency change plus a command.",
+        "what": "Coverage of anything outside apps/web/src and services/pricing/pricing",
+        "why": "The vitest half is scoped with --coverage.include=\"src/**\" and the pytest half with --cov=pricing, which is every source file either package has today. A new TypeScript source directory outside apps/web/src, or a second Python package beside pricing/, would be invisible to the report — not measured as zero, but absent, which the coverage gate treats as 'nothing measurable' rather than a failure. Widening either scope is a one-flag amendment.",
+        "paths": [
+          "apps/web/src",
+          "services/pricing/pricing"
+        ]
+      },
+      {
+        "what": "Per-rule counting and baselining of TypeScript compiler diagnostics",
+        "why": "tsc --noEmit runs in the build, so a type error fails the change; but it produces no SARIF and the factory has no built-in TypeScript checker, so its diagnostics are not counted per rule per file by the static gate and cannot be baselined. In practice this only matters if a pre-existing type error ever needed tolerating; there are none today.",
+        "paths": [
+          "apps/web/tsconfig.json"
+        ]
+      },
+      {
+        "what": "The coverage and SARIF tooling itself is installed at install time rather than declared by the repo",
+        "why": "@vitest/coverage-v8, @microsoft/eslint-formatter-sarif and pytest-cov are none of them in apps/web/package.json or services/pricing/pyproject.toml, and setup may not change the repo on an amendment. commands.install adds them with `npm install --no-save --no-package-lock` and a plain `pip install` into the sandbox virtualenv, so the working tree stays clean (verified: git status unchanged after a full install) — but it means the versions are resolved fresh from the registries on every run rather than pinned by package-lock.json. The vitest provider is pinned to the installed vitest version at install time, read out of node_modules, so it cannot drift from the runner it instruments.",
         "paths": [
           "apps/web/package.json",
-          "services/pricing/pyproject.toml",
-          ".factory/guardrails/coverage.json"
+          "apps/web/package-lock.json",
+          "services/pricing/pyproject.toml"
         ]
       },
       {
@@ -95,7 +135,40 @@
       "tried": "trial of round 1: install, build, test, control",
       "observed": "reached build_and_test, as claimed",
       "changed": null
+    },
+    {
+      "attempt": 6,
+      "tried": "Amendment for the coverage-and-checkers report. Read the runner out of .factory/bin/runner.tgz before changing anything, to find out what the gates actually require: schema/sandbox.json for the shape of commands.coverage, coverage_report and static_checks; runStaticTools, runSarifCheck, countSarif, sarifPath, readCoverage and fromLcov for how the results are read; and .github/workflows/factory-gates.yml for where each gate runs.",
+      "observed": "Two things decided the design. First, runStaticTools only runs its built-in eslint when node_modules/eslint/bin/eslint.js is at the repository root, and its built-in ruff only when pyproject.toml or ruff.toml is at the root; this monorepo has eslint under apps/web and pyproject under services/pricing, so neither built-in has ever fired and the static gate has been checking nothing — exactly what the report describes. Second, fromLcov passes each SF: path through rel(root, …), which leaves a relative path untouched, so a report written from inside apps/web would name files the gate cannot match against the changed-file list. The tests gate runs `build && coverage` and the coverage gate reads the report from disk in the same job, so the report only has to survive between two steps of one job.",
+      "changed": "Settled on one merged lcov report rather than two (the schema allows a single coverage_report), on absolute /tmp paths for the report and both SARIF files so nothing untracked lands in the working tree, and on two static_checks — eslint via @microsoft/eslint-formatter-sarif and ruff via its native --output-format sarif."
+    },
+    {
+      "attempt": 7,
+      "tried": "Built the pieces one at a time and checked the output of each. ruff check --output-format sarif over `services/pricing` from the repository root, with a scratch file planted in services/pricing/pricing/ to force a finding. eslint with the SARIF formatter from apps/web, with a scratch file in apps/web/src/ holding an unused var, an `any` and a `let` that should be `const`. @vitest/coverage-v8 with --coverage.reporter=lcovonly, and pytest-cov with --cov-report=lcov, each from its own package directory.",
+      "observed": "ruff reported ARG001 on the scratch file — so the E,F,B,SIM,RET,ARG selection in services/pricing/pyproject.toml is still discovered when ruff is invoked from the root — and wrote an absolute file:// URI, which relativises to services/pricing/pricing/… . eslint reported prefer-const, @typescript-eslint/no-unused-vars and @typescript-eslint/no-explicit-any, also with absolute URIs; on a clean tree it still writes a valid 846-byte SARIF with zero results, which is what keeps the check from being dropped. Both coverage runs wrote package-relative SF: paths (src/basket.ts, pricing/basket.py), which rel() would have left wrong. Deleted both scratch files and confirmed git status was unchanged.",
+      "changed": "Added a sed prefix per half — SF:apps/web/ and SF:services/pricing/ — and concatenated the two lcov files into one. Kept each coverage run inside its own package directory so it is the same invocation as commands.test plus flags, rather than a differently-rooted run that might discover different tests."
+    },
+    {
+      "attempt": 8,
+      "tried": "Wiped apps/web/node_modules and the virtualenv and ran the whole amended manifest from a clean checkout: install, build, test, coverage, then both static checks with the environment stripped to env -i PATH HOME TMPDIR LANG CI, which is what closedEnv passes. Checked git status after every step. Then copied the candidate manifest into .factory/sandbox/ and ran `bsf guardrails record --out` to a scratch path, so the two static checks went through the runner's own runSarifCheck and countSarif rather than through my shell.",
+      "observed": "install took 14s and left the working tree clean — npm install --no-save --no-package-lock adds @vitest/coverage-v8 and @microsoft/eslint-formatter-sarif without touching package.json or package-lock.json, and the formatter's own eslint 8 dependency stays nested under it, leaving eslint 9.39.5 at the top level. build, test (9 + 10 tests) and coverage all pass; the merged report holds 3 files at 100% of lines. Both SARIF checks produced valid, parseable SARIF under the stripped environment. The runner read both of them and reported them as checkers it could run.",
+      "changed": "Pinned @vitest/coverage-v8 to the vitest version read out of node_modules at install time, instead of hard-coding 5.1.1, so a dependabot bump of vitest cannot leave the provider on a mismatched major."
+    },
+    {
+      "attempt": 9,
+      "tried": "Ran `bsf sandbox trial` against this candidate locally, so the coverage report and both SARIF files were read by the runner's own readCoverage and runSarifCheck rather than by my own parsing.",
+      "observed": "The first run reached only `static`: install failed with 'Network is unreachable … No matching distribution found for setuptools>=68'. That is attempt 3's finding again — this agent sandbox reaches PyPI through a proxy whose variables closedEnv strips, and npm has its own proxy configuration so `npm ci` got through where pip did not. The trial runner has direct registry access, which ci.yml demonstrates for the same install. Re-ran with the dependencies already installed and install replaced by a no-op, purely to exercise the rest: reached build_and_test as claimed, control failed in an empty directory as it should, and all three checks passed — `lcov report at /tmp/bsf-coverage/lcov.info: 3 file(s), 100% of lines`, `SARIF at /tmp/bsf-sarif/eslint.sarif: 0 finding(s)`, `SARIF at /tmp/bsf-sarif/ruff.sarif: 0 finding(s)`.",
+      "changed": "Nothing. The install failure is an artefact of this agent sandbox's network, not of the command; the real trial on the runner is where install gets its verdict."
+    },
+    {
+      "attempt": 10,
+      "tried": "trial of round 1: install, build, test, control",
+      "observed": "reached build_and_test, as claimed",
+      "changed": null
     }
   ],
-  "frozen_at": "2026-11-21T05:38:33.942Z"
+  "amended_by": [
+    "coverage-and-checkers"
+  ],
+  "frozen_at": "2026-11-21T10:04:20.214Z"
 }
