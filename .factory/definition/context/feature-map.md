@@ -5,34 +5,88 @@
   Every agent reads this first. The question it has to answer is "where would
   this change go?" — so it names folders and what each one owns, not what the
   product does.
-
-  {{PLACEHOLDERS}} are filled in by setup.
 -->
 
-# Feature map — {{REPO_NAME}}
+# Feature map — polyglot-monorepo
 
-{{ONE_LINE_WHAT_THIS_REPO_IS}}
+One repository holding two independent packages in two languages — a
+TypeScript basket library and a Python pricing library — that implement the
+same money rule, stated once in `CONTRACT.md` and tested twice.
 
 ## Feature folders
 
 | Folder | Owns | Depends on |
 | --- | --- | --- |
-{{FEATURE_FOLDER_ROWS}}
+| `apps/web` | The cart's basket arithmetic in TypeScript: the `Item` interface, `subtotal`, `discounted` and `basketTotal`. Integer cents; `Math.round` for half-up. Its own toolchain (`package.json`, `tsconfig.json`, `eslint.config.mjs`). | Nothing in this repo. No runtime dependencies at all — `package.json` has `devDependencies` only. Conceptually bound to `CONTRACT.md`. |
+| `apps/web/src` | The implementation. One file, `basket.ts`. | — |
+| `apps/web/test` | The vitest suite, `basket.test.ts`. Holds a `CONTRACT` constant that is the five rows of the contract table verbatim. | `apps/web/src` |
+| `services/pricing` | The same basket arithmetic in Python: the `Item` dataclass, `subtotal`, `discounted`, `basket_total`. Integer cents; `Decimal` with `ROUND_HALF_UP`. Its own toolchain (`pyproject.toml`, covering setuptools, pytest and ruff). | Nothing in this repo. `dependencies` in `pyproject.toml` is empty; only the standard library is used. Conceptually bound to `CONTRACT.md`. |
+| `services/pricing/pricing` | The package. `basket.py` is the implementation; `__init__.py` re-exports `basket_total`, `discounted` and `subtotal`. | — |
+| `services/pricing/tests` | The pytest suite, `test_basket.py`. Holds a `CONTRACT` list that is the same five rows. | `services/pricing/pricing` |
+
+**The two feature folders do not import each other, and cannot.** They are in
+different languages with no bridge between them — no HTTP client, no
+subprocess call, no generated code, no shared schema file. What couples them
+is `CONTRACT.md`, and the coupling is enforced only by the fact that both
+test suites encode the same five rows. Changing one implementation and not
+the other fails exactly one suite; this was checked by truncating instead of
+rounding half up in `services/pricing/pricing/basket.py`, which failed 4
+pytest tests and 0 vitest tests.
 
 ## Shared
 
 | Folder | What it is | Rule |
 | --- | --- | --- |
-{{SHARED_FOLDER_ROWS}}
+| `CONTRACT.md` (file, at the root) | The one shared artifact. States the money representation (integer cents, never a float) and the discount rounding rule (applied to the basket total, not line by line, rounding half up), plus a five-row table of worked examples. | It is the source, and both implementations are copies of it. A change to the rule or to the table is a change to three files at once: this one, `apps/web/test/basket.test.ts` and `services/pricing/tests/test_basket.py`. Changing the table in one suite and not the other leaves the two apps disagreeing with no test failing anywhere — the one way this repo can go quietly wrong. |
+
+There is no shared *code* folder, and with two languages and no build-time
+bridge there is nowhere for one to live. "Shared" here means the prose
+contract.
 
 ## Where things go
 
-- **A new feature** gets its own folder under {{FEATURE_ROOT}}.
-- **Something used by two features** moves to {{SHARED_ROOT}}, and not before
-  the second use. One caller is not a shared concern.
-- **Nothing in a feature folder imports from another feature folder.** Where
-  two features need the same thing, it belongs in shared.
+- **A new feature** gets its own folder under `apps/` if it is TypeScript and
+  user-facing, or under `services/` if it is Python and server-side. That is
+  the existing split and the only one the repo asserts; `apps/web` and
+  `services/pricing` are each a package root with its own manifest, lockfile
+  or equivalent, and its own linter config.
+- **Something used by two features** has no home yet. Within one language,
+  create a sibling package under the same root and depend on it. Across the
+  two languages there is no mechanism, and inventing one — a generated client,
+  a shared JSON schema, a code generator — is an architectural decision, not a
+  refactor; it should be proposed rather than slipped into a change.
+- **Nothing in a feature folder imports from another feature folder.** Here
+  this holds for free, and keeping it that way matters: the two packages are
+  installed, linted and tested independently, and `.github/workflows/ci.yml`
+  filters by path on the assumption that a change under `apps/web` cannot
+  affect `services/pricing`.
+- **A change to the rounding rule touches both languages and the contract.**
+  If a change edits `basket.ts` without `basket.py`, or either without
+  `CONTRACT.md`, that is the signal to stop and check it is deliberate.
 
 ## Not in this repo
 
-{{OUT_OF_SCOPE}}
+- **Any running application.** Neither half starts. `apps/web` sets `noEmit`
+  in `tsconfig.json` and has no `start`, `dev` or `serve` script, no bundler,
+  no HTML and no DOM code; `services/pricing` has no `__main__`, no ASGI or
+  WSGI app and no web framework in its dependencies. There is no server and no
+  UI.
+- **The connection between the two apps.** `README.md` describes it as "the
+  web app asks the service what a basket costs", but nothing implements that —
+  there is no HTTP client in `apps/web` and no endpoint in
+  `services/pricing`. The relationship is aspirational; today the two agree
+  only by both matching `CONTRACT.md`.
+- **Persistence and I/O of any kind.** No database, cache, queue, object
+  store, filesystem access or outbound call. Both implementations are pure
+  functions over integers.
+- **Configuration.** No environment variable is read anywhere under `apps/` or
+  `services/` — searched for `process.env`, `os.environ`, `getenv` and
+  `dotenv` and found nothing. No `.env` file, no settings module, no config
+  file beyond the two toolchain manifests.
+- **Containers and deployment.** No Dockerfile, no compose file, no
+  devcontainer, no deploy workflow. `.github/workflows/ci.yml` installs, lints
+  and tests; it does not build or publish an artifact.
+- **Coverage tooling.** Neither package has a coverage provider installed, so
+  coverage is not measured for either language.
+- **Authentication, authorization, users, sessions, money movement.** The code
+  computes a number; it never takes a payment.

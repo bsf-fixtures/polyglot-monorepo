@@ -1,0 +1,58 @@
+# Documentation hosts for what this repo actually uses. One host per line;
+# blank lines and # comments are ignored. Every entry below is backed by a
+# dependency in apps/web/package.json or services/pricing/pyproject.toml, or
+# by a language feature the implementations depend on.
+
+# --- apps/web: TypeScript ---
+
+# TypeScript itself (devDependency "typescript"). tsconfig.json leans on
+# strict and noUncheckedIndexedAccess, both documented here.
+www.typescriptlang.org
+
+# vitest (devDependency "vitest", the test runner behind `vitest run`).
+vitest.dev
+
+# eslint 9 flat config (devDependency "eslint" + "@eslint/js"), which is what
+# eslint.config.mjs is written against.
+eslint.org
+
+# typescript-eslint (devDependency "typescript-eslint"), the recommended
+# config spread into eslint.config.mjs.
+typescript-eslint.io
+
+# Math.round, Number.isInteger, TypeError and RangeError — the exact
+# half-up/half-away-from-zero semantics the TypeScript implementation relies
+# on, and the error types its guards throw.
+developer.mozilla.org
+
+# Node and npm: `npm ci` and the committed package-lock.json.
+nodejs.org
+docs.npmjs.com
+
+# --- services/pricing: Python ---
+
+# The standard library. decimal (Decimal, ROUND_HALF_UP, quantize) and
+# dataclasses (frozen=True) are the whole of this package's imports, and the
+# half-to-even behaviour of the built-in round() is why Decimal is used.
+docs.python.org
+
+# pytest (dev extra "pytest"), including parametrize, which both the contract
+# table and the error cases use.
+docs.pytest.org
+
+# ruff (dev extra "ruff"). pyproject selects E, F, B, SIM, RET and ARG; the
+# rule reference for each code lives here.
+docs.astral.sh
+
+# setuptools, the build-backend in pyproject.toml, and its
+# tool.setuptools.packages.find configuration.
+setuptools.pypa.io
+
+# Packaging: pyproject.toml metadata, optional-dependencies/extras, and
+# editable installs (`pip install -e './services/pricing[dev]'`).
+packaging.python.org
+pip.pypa.io
+
+# Virtual environments — the sandbox installs into one rather than into the
+# runner's interpreter, and PEP 668 is why.
+peps.python.org
