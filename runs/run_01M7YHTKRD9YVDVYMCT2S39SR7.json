@@ -1,0 +1,33 @@
+{
+  "schema": "run/1",
+  "id": "run_01M7YHTKRD9YVDVYMCT2S39SR7",
+  "work_item": "wi_01M7YHSHRXB8ZEB5Q1S5EZ9WDT",
+  "pipeline": "product_work",
+  "actor": {
+    "kind": "agent",
+    "harness": "claude-code"
+  },
+  "started_at": "2026-11-21T07:58:38.861Z",
+  "ended_at": "2026-11-21T08:03:50.629Z",
+  "duration_sec": 312,
+  "outcome": "no_action",
+  "pr": null,
+  "steps": [
+    {
+      "role": "triage",
+      "model": "unknown",
+      "attempt": 1,
+      "duration_sec": 0,
+      "tokens": {
+        "in": 10,
+        "out": 3022
+      },
+      "cost_usd": 0.0064,
+      "transcript": "",
+      "exit": "ok"
+    }
+  ],
+  "gates": [],
+  "cost_usd": 0.0064,
+  "escalated": false
+}
