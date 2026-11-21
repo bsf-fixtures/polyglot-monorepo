@@ -56,3 +56,25 @@ pip.pypa.io
 # Virtual environments — the sandbox installs into one rather than into the
 # runner's interpreter, and PEP 668 is why.
 peps.python.org
+
+# --- coverage and SARIF, added by the coverage-and-checkers amendment ---
+# These are not repo dependencies: the sandbox installs them at install time
+# so that neither package manifest grows a dependency. They are listed
+# because the commands that use them are now part of the manifest, and the
+# flags are version-sensitive.
+
+# coverage.py, which pytest-cov drives. The lcov report format, `relative_files`
+# and COVERAGE_FILE are all documented here, and lcov output is what both
+# halves of the merged report are written in.
+coverage.readthedocs.io
+
+# pytest-cov (installed into the sandbox virtualenv): --cov, and the
+# --cov-report=lcov:FILE form the coverage command uses.
+pytest-cov.readthedocs.io
+
+# The SARIF 2.1.0 specification. ruff writes it natively and
+# @microsoft/eslint-formatter-sarif writes it for eslint; the static gate
+# reads runs[].results[].ruleId and physicalLocation.artifactLocation.uri,
+# so what those fields are allowed to contain decides whether findings land
+# on the right file.
+docs.oasis-open.org
