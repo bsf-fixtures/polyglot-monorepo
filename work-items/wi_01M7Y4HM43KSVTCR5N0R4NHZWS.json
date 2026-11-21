@@ -1,0 +1,23 @@
+{
+  "schema": "work-item/1",
+  "id": "wi_01M7Y4HM43KSVTCR5N0R4NHZWS",
+  "created_at": "2026-11-21T04:06:32.835Z",
+  "source": {
+    "kind": "issue",
+    "ref": "#3",
+    "actor": "build-software-factory-bsf-fixture[bot]",
+    "via": null
+  },
+  "trigger_class": "request",
+  "pipeline": "product_work",
+  "title": "[aw] Setup: failed before agent execution started",
+  "body": null,
+  "priority": "normal",
+  "fingerprint": "sha256:85d390e94d1db4385068468c864f913b6a22151c76c01033792fa70fc8e38f26",
+  "status": "waiting_trust",
+  "runs": [],
+  "pr": null,
+  "parent": null,
+  "related": [],
+  "spec": null
+}
